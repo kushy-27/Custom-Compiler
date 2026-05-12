@@ -1,0 +1,10 @@
+#factorial
+VAR x = 1
+VAR total = 1
+
+WHILE x <= 10 THEN
+    VAR total = total * x
+    VAR x = x + 1
+END
+
+total
