@@ -17,6 +17,7 @@ TT_GT			= 'GT'
 TT_LTE			= 'LTE'
 TT_GTE			= 'GTE'
 TT_EOF			= 'EOF'
+TT_NEWLINE 		= 'NEWLINE'
 
 KEYWORDS = [
 	'VAR',
@@ -73,7 +74,7 @@ class Token:
 			self.pos_end.advance()
 
 		if pos_end:
-			self.pos_end = pos_end
+			self.pos_end = pos_end.copy()
 	
 	def __repr__(self):
 		if self.value: return f'{self.type}:{self.value}'
@@ -107,12 +108,18 @@ class Lexer:
 		tokens = []
 
 		while self.current_char != None:
-			if self.current_char in ' \t\n':
+			if self.current_char in ' \t':
+				self.advance()
+			elif self.current_char == '\n':
+				tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
 				self.advance()
 			elif self.current_char == '#':
 				self.skip_comment()
 			elif self.current_char in DIGITS:
-				tokens.append(self.make_number())
+				token, error = self.make_number()
+				if error:
+					return [], error
+				tokens.append(token)
 			elif self.current_char in LETTERS:
 				tokens.append(self.make_identifier())
 			elif self.current_char == '+':
@@ -160,20 +167,22 @@ class Lexer:
 		dot_count = 0
 		pos_start = self.pos.copy()
 
-		while self.current_char != None and self.current_char in DIGITS + '.':
+		while self.current_char is not None and self.current_char in DIGITS + '.':
 			if self.current_char == '.':
-				if dot_count == 1:  return None, IllegalCharError(
-                    pos_start, self.pos,
-                    "Multiple '.' in number"
-                )
+				if dot_count == 1:
+					return None, IllegalCharError(
+						pos_start, self.pos,
+						"Multiple '.' in number"
+					)
 				dot_count += 1
-			num_str +=  self.current_char
+
+			num_str += self.current_char
 			self.advance()
 
 		if dot_count == 0:
-			return Token(TT_INT, int(num_str), pos_start, self.pos)
+			return Token(TT_INT, int(num_str), pos_start, self.pos), None
 		else:
-			return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
+			return Token(TT_FLOAT, float(num_str), pos_start, self.pos), None
 
 	def make_identifier(self):
 		id_str = ''
@@ -194,7 +203,6 @@ class Lexer:
 			self.advance()
 			return Token(TT_NE, pos_start=pos_start, pos_end=self.pos), None
 
-		self.advance()
 		return None, ExpectedCharError(pos_start, self.pos, "'=' (after '!')")
 	
 	def make_equals(self):
