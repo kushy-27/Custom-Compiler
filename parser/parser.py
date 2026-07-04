@@ -17,6 +17,7 @@ TT_GT			= 'GT'
 TT_LTE			= 'LTE'
 TT_GTE			= 'GTE'
 TT_EOF			= 'EOF'
+TT_NEWLINE 		= 'NEWLINE'
 from errors.errors import InvalidSyntaxError
 from parser.parse_result import ParseResult
 from parser.nodes import *
@@ -27,7 +28,7 @@ class Parser:
 		self.tok_idx = -1
 		self.advance()
 
-	def advance(self, ):
+	def advance(self): 
 		self.tok_idx += 1
 		if self.tok_idx < len(self.tokens):
 			self.current_tok = self.tokens[self.tok_idx]
@@ -37,15 +38,34 @@ class Parser:
 		res = ParseResult()
 		statements = []
 
+		while self.current_tok.type == TT_NEWLINE:
+			res.register_advancement()
+			self.advance()
+
 		while self.current_tok.type != TT_EOF:
-			stmt = res.register(self.expr()) 
+			stmt = res.register(self.expr())
 			if res.error:
 				return res
 
 			statements.append(stmt)
 
+			if self.current_tok.type != TT_NEWLINE and self.current_tok.type != TT_EOF:
+				return res.failure(InvalidSyntaxError(
+					self.current_tok.pos_start,
+					self.current_tok.pos_end,
+					"Expected newline or EOF"
+				))
+
+			while self.current_tok.type == TT_NEWLINE:
+				res.register_advancement()
+				self.advance()
+
 		return res.success(StatementsNode(statements))
 
+	def skip_newlines(self, res):
+		while self.current_tok.type == TT_NEWLINE:
+			res.register_advancement()
+			self.advance()
  
 	def if_expr(self):
 		res = ParseResult()
@@ -72,6 +92,8 @@ class Parser:
 
 		res.register_advancement()
 		self.advance()
+  
+		self.skip_newlines(res)
 
 		statements = []
 		while not self.current_tok.matches(TT_KEYWORD, 'ELIF') \
@@ -81,12 +103,14 @@ class Parser:
 			stmt = res.register(self.expr())
 			if res.error: return res
 			statements.append(stmt)
+			self.skip_newlines(res)
 
 		cases.append((condition, StatementsNode(statements)))
 
 		while self.current_tok.matches(TT_KEYWORD, 'ELIF'):
 			res.register_advancement()
 			self.advance()
+			
 
 			condition = res.register(self.expr())
 			if res.error: return res
@@ -99,7 +123,8 @@ class Parser:
 
 			res.register_advancement()
 			self.advance()
-
+			self.skip_newlines(res)
+   
 			statements = []
 			while not self.current_tok.matches(TT_KEYWORD, 'ELIF') \
 				and not self.current_tok.matches(TT_KEYWORD, 'ELSE') \
@@ -108,18 +133,21 @@ class Parser:
 				stmt = res.register(self.expr())
 				if res.error: return res
 				statements.append(stmt)
+				self.skip_newlines(res)
 
 			cases.append((condition, StatementsNode(statements)))
 
 		if self.current_tok.matches(TT_KEYWORD, 'ELSE'):
 			res.register_advancement()
 			self.advance()
+			self.skip_newlines(res)
 
 			statements = []
 			while not self.current_tok.matches(TT_KEYWORD, 'END'):
 				stmt = res.register(self.expr())
 				if res.error: return res
 				statements.append(stmt)
+				self.skip_newlines(res)
 			else_case = StatementsNode(statements)
     
 		if not self.current_tok.matches(TT_KEYWORD, 'END'):
@@ -196,6 +224,7 @@ class Parser:
 
 		res.register_advancement()
 		self.advance()
+		self.skip_newlines(res)
 
 		statements = []
 
@@ -203,6 +232,7 @@ class Parser:
 			stmt = res.register(self.expr())
 			if res.error: return res
 			statements.append(stmt)
+			self.skip_newlines(res)
 
 		res.register_advancement()
 		self.advance()
@@ -236,6 +266,7 @@ class Parser:
 
 		res.register_advancement()
 		self.advance()
+		self.skip_newlines(res)
 
 		statements = []
 
@@ -243,6 +274,7 @@ class Parser:
 			stmt = res.register(self.expr())
 			if res.error: return res
 			statements.append(stmt)
+			self.skip_newlines(res)
 
 		if not self.current_tok.matches(TT_KEYWORD, 'END'):
 			return res.failure(InvalidSyntaxError(
@@ -301,9 +333,9 @@ class Parser:
 			if res.error: return res
 			return res.success(while_expr)
 
-		return res.failure(InvalidSyntaxError(
+		return res.failure(InvalidSyntaxError( 
 			tok.pos_start, tok.pos_end,
-			"Expected int, float, identifier, '+', '-', '('"
+			"Expected int, float, identifier, '(', IF, FOR, or WHILE"
 		))
   
 	def power(self):
