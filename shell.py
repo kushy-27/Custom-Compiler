@@ -43,22 +43,44 @@ if __name__ == "__main__":
 
     else:
         history = []
-        while True:
-            text = input("basic > ")
+        block_buffer = []
+        block_depth = 0
 
-            if text.strip() == "exit":
+        while True:
+            prompt = "basic > " if block_depth == 0 else "... "
+            text = input(prompt)
+
+            if text.strip().lower() == "exit":
                 break
 
-            history.append(text)
-            full_code = "\n".join(history)
+            stripped = text.strip()
+            upper = stripped.upper()
 
-            analyzer = SemanticAnalyzer() 
+            block_buffer.append(text)
+
+            if upper.startswith("IF ") or upper.startswith("WHILE ") or upper.startswith("FOR "):
+                block_depth += 1
+
+            if upper == "END":
+                block_depth -= 1
+
+            if block_depth > 0:
+                continue
+
+            code_piece = "\n".join(block_buffer)
+            test_history = history + [code_piece]
+            full_code = "\n".join(test_history)
+
+            analyzer = SemanticAnalyzer()
 
             value, error, module = run('<stdin>', full_code, analyzer)
 
             if error:
                 print(error.as_string())
-                history.pop()
+                block_buffer.clear()
                 continue
+
+            history.append(code_piece)
+            block_buffer.clear()
 
             execute_ir(module)
